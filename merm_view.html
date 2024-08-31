@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Mermaid File Viewer with Zoom</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/8.11.0/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 95%;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        #fileInput {
+            display: block;
+            margin: 20px auto;
+            padding: 10px;
+            font-size: 16px;
+        }
+        #mermaidContent {
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin-top: 20px;
+            min-height: 400px;
+            overflow: auto;
+            width: 90%;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        #errorMessage {
+            color: #d32f2f;
+            background-color: #ffcdd2;
+            border: 1px solid #ef9a9a;
+            padding: 10px;
+            margin-top: 20px;
+            display: none;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        #successMessage {
+            color: #1b5e20;
+            background-color: #c8e6c9;
+            border: 1px solid #a5d6a7;
+            padding: 10px;
+            margin-top: 20px;
+            display: none;
+        }
+        #zoomControls {
+            margin-top: 10px;
+            text-align: center;
+        }
+        .zoomButton {
+            padding: 5px 10px;
+            margin: 0 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        
+        /* Dark mode styles */
+        body.dark-mode {
+            background-color: #1e1e1e;
+            color: #e0e0e0;
+        }
+        body.dark-mode #mermaidContent {
+            border-color: #444;
+        }
+        /* Add more dark mode styles as needed */
+        
+        #darkModeToggle {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Mermaid chart viewer</h1>
+    <input type="file" id="fileInput" accept=".mmd,.mermaid,.txt,text/plain">
+    <div id="mermaidContent"></div>
+    <div id="zoomControls">
+        <button class="zoomButton" onclick="zoom(1.2)">Zoom In</button>
+        <button class="zoomButton" onclick="zoom(0.8)">Zoom Out</button>
+        <button class="zoomButton" onclick="resetZoom()">Reset Zoom</button>
+        <button class="zoomButton" id="downloadSvg">Download SVG</button>
+    </div>
+    <div id="errorMessage"></div>
+    <div id="successMessage"></div>
+    <button id="darkModeToggle">Toggle Dark Mode</button>
+    <div id="dropZone" style="border: 2px dashed #ccc; padding: 20px; text-align: center; margin-top: 20px;">
+        Drag and drop a Mermaid file here
+    </div>
+
+    <script>
+        let currentZoom = 1;
+        let lastRenderedContent = '';
+
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'default',
+            securityLevel: 'strict',
+            logLevel: 'debug'
+        });
+
+        const dropZone = document.getElementById('dropZone');
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.style.backgroundColor = '#e0e0e0';
+        });
+
+        dropZone.addEventListener('dragleave', (e) => {
+            dropZone.style.backgroundColor = '';
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.style.backgroundColor = '';
+            const file = e.dataTransfer.files[0];
+            handleFile(file);
+        });
+
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            handleFile(file);
+        });
+
+        function handleFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                let content = e.target.result;
+                content = convertClassNamesToUpperCase(content);
+                renderMermaidDiagram(content);
+            };
+            reader.readAsText(file);
+        }
+
+        function convertClassNamesToUpperCase(content) {
+            content = content.replace(/\b(classDef)\s+(\w+)/g, function(match, p1, p2) {
+                return p1 + ' ' + p2.toUpperCase();
+            });
+            
+            content = content.replace(/\b(class)\s+(\w+)\s+(\w+)/g, function(match, p1, p2, p3) {
+                return p1 + ' ' + p2 + ' ' + p3.toUpperCase();
+            });
+            
+            return content;
+        }
+
+        function renderMermaidDiagram(content) {
+            const mermaidContent = document.getElementById('mermaidContent');
+            const errorMessage = document.getElementById('errorMessage');
+            const successMessage = document.getElementById('successMessage');
+
+            mermaidContent.innerHTML = '';
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+
+            try {
+                mermaid.parse(content);
+                mermaid.render('mermaid-diagram', content, function(svgCode) {
+                    mermaidContent.innerHTML = svgCode;
+                    successMessage.textContent = 'Diagram rendered successfully!';
+                    successMessage.style.display = 'block';
+                    resetZoom();
+                });
+            } catch (error) {
+                errorMessage.textContent = `Error rendering diagram:\n${error.str || error.message}\n\nError details:\n${JSON.stringify(error, null, 2)}`;
+                errorMessage.style.display = 'block';
+                console.error('Mermaid error:', error);
+            }
+        }
+
+        function zoom(factor) {
+            currentZoom *= factor;
+            const svg = document.querySelector('#mermaidContent svg');
+            if (svg) {
+                svg.style.transform = `scale(${currentZoom})`;
+                svg.style.transformOrigin = 'top left';
+            }
+        }
+
+        function resetZoom() {
+            currentZoom = 1;
+            const svg = document.querySelector('#mermaidContent svg');
+            if (svg) {
+                svg.style.transform = 'scale(1)';
+                svg.style.transformOrigin = 'top left';
+            }
+        }
+
+        document.getElementById('darkModeToggle').addEventListener('click', function() {
+            document.body.classList.toggle('dark-mode');
+            mermaid.initialize({ theme: document.body.classList.contains('dark-mode') ? 'dark' : 'default' });
+            if (document.getElementById('mermaidContent').innerHTML) {
+                renderMermaidDiagram(lastRenderedContent);
+            }
+        });
+
+        document.getElementById('downloadSvg').addEventListener('click', function() {
+            const svg = document.querySelector('#mermaidContent svg');
+            if (svg) {
+                const svgData = new XMLSerializer().serializeToString(svg);
+                const svgBlob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
+                const svgUrl = URL.createObjectURL(svgBlob);
+                const downloadLink = document.createElement('a');
+                downloadLink.href = svgUrl;
+                downloadLink.download = 'mermaid_diagram.svg';
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+            }
+        });
+    </script>
+</body>
+</html>
