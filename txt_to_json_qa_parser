@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Race Report Parser</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #editor, #inputText {
+            height: 300px;
+            border: 1px solid #ccc;
+            margin-bottom: 10px;
+        }
+        #inputText {
+            width: 100%;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>Race Report Parser</h1>
+    <h2>Input Options:</h2>
+    <h3>1. Upload a file:</h3>
+    <input type="file" id="fileInput" accept=".txt">
+    <h3>2. Or paste your text here:</h3>
+    <textarea id="inputText" placeholder="Paste your race report text here..."></textarea>
+    <br>
+    <button onclick="parseInput()">Parse Input</button>
+    <h2>Parsed JSON (Editable)</h2>
+    <div id="editor"></div>
+    <button onclick="downloadJSON()">Download JSON</button>
+
+    <script>
+        let editor;
+
+        function initializeEditor() {
+            editor = ace.edit("editor");
+            editor.setTheme("ace/theme/monokai");
+            editor.session.setMode("ace/mode/json");
+        }
+
+        function parseInput() {
+            const file = document.getElementById('fileInput').files[0];
+            const textInput = document.getElementById('inputText').value.trim();
+
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const content = e.target.result;
+                    processContent(content);
+                };
+                reader.readAsText(file);
+            } else if (textInput) {
+                processContent(textInput);
+            } else {
+                alert('Please either upload a file or paste text into the input box.');
+            }
+        }
+
+        function processContent(content) {
+            const parsedJSON = parseRaceReport(content);
+            editor.setValue(JSON.stringify(parsedJSON, null, 2));
+        }
+
+        function parseRaceReport(content) {
+            const lines = content.split('\n');
+            let raceReport = {
+                race_report_id: '',
+                race_metadata: {},
+                qa_pairs: []
+            };
+
+            let currentQuestion = '';
+            let currentAnswer = '';
+            let qaIndex = 0;
+
+            lines.forEach(line => {
+                line = line.trim();
+                if (line.startsWith('Race Title:')) {
+                    raceReport.race_metadata.race_name = line.split(':')[1].trim();
+                } else if (line.startsWith('Date:')) {
+                    raceReport.race_metadata.date = line.split(':')[1].trim();
+                } else if (line.startsWith('Distance:')) {
+                    raceReport.race_metadata.distance = line.split(':')[1].trim();
+                } else if (line.endsWith('?') || line.endsWith(':')) {
+                    if (currentQuestion) {
+                        raceReport.qa_pairs.push({
+                            id: `qa_${(++qaIndex).toString().padStart(3, '0')}`,
+                            question: currentQuestion,
+                            answer: currentAnswer.trim()
+                        });
+                    }
+                    currentQuestion = line;
+                    currentAnswer = '';
+                } else if (currentQuestion && line !== '') {
+                    currentAnswer += line + ' ';
+                }
+            });
+
+            // Add the last Q&A pair
+            if (currentQuestion) {
+                raceReport.qa_pairs.push({
+                    id: `qa_${(++qaIndex).toString().padStart(3, '0')}`,
+                    question: currentQuestion,
+                    answer: currentAnswer.trim()
+                });
+            }
+
+            // Generate race_report_id
+            const raceName = raceReport.race_metadata.race_name.replace(/\s+/g, '_').toLowerCase();
+            const raceDate = raceReport.race_metadata.date.replace(/\s+/g, '_').toLowerCase();
+            raceReport.race_report_id = `${raceName}_${raceDate}`;
+
+            // Update QA pair IDs with the race_report_id
+            raceReport.qa_pairs.forEach((pair, index) => {
+                pair.id = `${raceReport.race_report_id}_qa_${(index + 1).toString().padStart(3, '0')}`;
+            });
+
+            return raceReport;
+        }
+
+        function downloadJSON() {
+            const jsonContent = editor.getValue();
+            const blob = new Blob([jsonContent], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'race_report.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        window.onload = initializeEditor;
+    </script>
+</body>
+</html>
